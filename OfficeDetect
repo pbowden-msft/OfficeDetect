@@ -1,0 +1,335 @@
+#!/bin/sh
+
+TOOL_NAME="Microsoft Office Detection Tool"
+TOOL_VERSION="1.0"
+## Copyright (c) 2016 Microsoft Corp. All rights reserved.
+## Scripts are not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind.
+## Microsoft disclaims all implied warranties including, without limitation, any implied warranties of merchantability or of fitness for a 
+## particular purpose. The entire risk arising out of the use or performance of the scripts and documentation remains with you. In no event shall
+## Microsoft, its authors, or anyone else involved in the creation, production, or delivery of the scripts be liable for any damages whatsoever 
+## (including, without limitation, damages for loss of business profits, business interruption, loss of business information, or other pecuniary 
+## loss) arising out of the use of or inability to use the sample scripts or documentation, even if Microsoft has been advised of the possibility
+## of such damages.
+
+## Set up logging
+# All stdout and sterr will go to the log file. Console alone can be accessed through >&3. For console and log use | tee /dev/fd/3
+SCRIPT_NAME=$(basename "$0")
+WORKING_FOLDER=$(dirname "$0")
+LOG_FILE="$WORKING_FOLDER/$SCRIPT_NAME.log"
+touch $LOG_FILE
+exec 3>&1 1>${LOG_FILE} 2>&1
+
+## Formatting support
+TEXT_RED='\033[0;31m'
+TEXT_YELLOW='\033[0;33m'
+TEXT_GREEN='\033[0;32m'
+TEXT_BLUE='\033[0;34m'
+TEXT_NORMAL='\033[0m'
+
+## Initialize global run-time variables
+
+## Path constants
+PATH_WORD2016="/Applications/Microsoft Word.app"
+PATH_EXCEL2016="/Applications/Microsoft Excel.app"
+PATH_PPT2016="/Applications/Microsoft PowerPoint.app"
+PATH_OUTLOOK2016="/Applications/Microsoft Outlook.app"
+PATH_ONENOTE2016="/Applications/Microsoft OneNote.app"
+PATH_MAU="/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app"
+PATH_ENDNOTE="/Library/Application Support/Microsoft/Office365/User Content.localized/Startup.localized/Word/EndNote CWYW Word 2016.bundle"
+PATH_WEBEX="/Library/Application Support/Microsoft/WebExPlugin/WebexOutlookPlugin.bundle"
+PATH_WORD_ADDINS="$HOME/Library/Group Containers/UBF8T346G9.Office/User Content.localized/Startup.localized/Word"
+PATH_PPT_ADDINS="$HOME/Library/Group Containers/UBF8T346G9.Office/User Content.localized/Add-Ins"
+
+## Functions
+function log_message {
+	echo $(date) "$*"
+}
+
+function console_message {
+	echo "$*" >&3
+}
+
+function formatted_console_message {
+	printf "$1" "$2" >&3
+}
+
+function all_message {
+	echo $(date) "$*"
+	echo "$*" >&3
+}
+
+function log_device {
+	log_message "In function 'log_device'"
+	system_profiler SPSoftwareDataType -detailLevel mini
+	system_profiler SPHardwareDataType -detailLevel mini
+}
+
+function show_command_usage {
+	log_message "In function 'command_usage'"
+	console_message "command-line usage: $SCRIPT_NAME [-help]"
+	console_message ""
+}
+
+function detect_OS {
+	log_message "In function 'detect_OS'"
+	console_message ""
+	formatted_console_message "%-45s" "Operating System"
+	OS_VERSION=$(sw_vers -productVersion)
+	OS_BUILD=$(sw_vers -buildVersion)
+	log_message "Version of Operating System - $OS_VERSION ($OS_BUILD)"
+	console_message "${TEXT_GREEN}$OS_VERSION ($OS_BUILD)${TEXT_NORMAL}"
+}
+
+function test_CDN {
+	log_message "In function 'test_CDN'"
+	formatted_console_message "%-47s" "    CDN Connection"
+	CDN_URL="http://officecdn.microsoft.com/pr/C1297A47-86C4-4C1F-97FA-950631F94777/OfficeMac/0409MSWD15-chk.xml"
+	CDN_RESPONSE=$(curl --head --location --url $CDN_URL)
+	log_message "$CDN_RESPONSE"
+	if [[ "$CDN_RESPONSE[@]" == *"200 OK"* ]]; then
+		console_message "${TEXT_GREEN}OK${TEXT_NORMAL}"
+		formatted_console_message "%-47s" "    CDN Provider"
+		if [[ "$CDN_RESPONSE[@]" == *"Powered-By-ChinaCache"* ]]; then
+			console_message "${TEXT_GREEN}ChinaCache${TEXT_NORMAL}"
+		elif [[ "$CDN_RESPONSE[@]" == *"X-MSEdge-Ref"* ]]; then
+			console_message "${TEXT_GREEN}Azure${TEXT_NORMAL}"
+		else
+			console_message "${TEXT_GREEN}Akamai${TEXT_NORMAL}"
+		fi
+	else
+		console_message "${TEXT_RED}Failed${TEXT_NORMAL}"
+	fi
+}
+
+function detect_addins {
+	log_message "In function 'detect_addins' with arguments $1 and $2"
+	console_message ""
+	formatted_console_message "%-45s" "Detecting $2 add-ins"
+	#shopt -s nullglob
+	cd "$1"
+	for f in *
+	do
+		log_message $f
+		FILE_ADDIN=$f
+		if [ "$FILE_ADDIN" == "linkCreation.dotm" ]; then
+			log_message "Detected Adobe Acrobat PDFMaker"
+			console_message "${TEXT_GREEN}Adobe Acrobat PDFMaker${TEXT_NORMAL}"
+		elif [[ "$FILE_ADDIN" == "Mendeley-word2016"* ]]; then
+			log_message "Detected Mendeley"
+			console_message "${TEXT_GREEN}Mendeley${TEXT_NORMAL}"
+		fi
+	done
+}
+
+function detect {
+	log_message "In function 'detect with arguments $1 and $2'"
+	console_message ""
+	formatted_console_message "%-45s" "Detecting $2"
+	if [ -d "$1" ] || [ -e "$1" ] ; then
+		log_message "Detected $1"
+		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
+		get_version "$1" "$2"
+		get_arch "$1" "$2"
+		get_MAS "$1" "$2"
+		validate_codesign "$1" "$2"
+	else
+		log_message "$1 was not detected"
+		console_message "${TEXT_YELLOW}Not detected${TEXT_NORMAL}"
+		return
+	fi
+}
+
+function dump_config {
+	log_message "In function 'dump_config with arguments $1'"
+	local CONFIG="$1"
+	defaults read $1
+}
+
+function get_version {
+	log_message "In function 'get_version with arguments $1 and $2'"
+	formatted_console_message "%-47s" "    Installed Version"
+	APP_VERSION=""
+	APP_VERSION=$(/usr/libexec/plistbuddy -c 'print CFBundleVersion' "$1/Contents/Info.plist")
+	log_message "Version of $1 - $APP_VERSION"
+	console_message "${TEXT_GREEN}$APP_VERSION${TEXT_NORMAL}"
+}
+
+function get_arch {
+	log_message "In function 'get_arch with arguments $1 and $2'"
+	formatted_console_message "%-47s" "    Architecture"
+	APP_ARCH=""
+	APP_ARCH32=false
+	APP_ARCH64=false
+	APP_ARCH=$(file -N "$1/Contents/MacOS/"*)
+	log_message "Architecture of $APP_ARCH"
+	if [[ "$APP_ARCH" == *"64-bit"* ]]; then
+		APP_ARCH64=true
+	fi
+	if [[ "$APP_ARCH" == *"i386"* ]]; then
+		APP_ARCH32=true
+	fi
+	if [ $APP_ARCH64 = true ] && [ $APP_ARCH32 = true ]; then 
+		console_message "${TEXT_GREEN}FAT (64-bit & 32-bit)${TEXT_NORMAL}"
+	elif [ $APP_ARCH64 = true ] && [ $APP_ARCH32 = false ]; then
+		console_message "${TEXT_GREEN}64-bit${TEXT_NORMAL}"
+	elif [ $APP_ARCH64 = false ] && [ $APP_ARCH32 = true ]; then
+		console_message "${TEXT_GREEN}32-bit${TEXT_NORMAL}"
+	else
+		console_message "${TEXT_RED}Unknown${TEXT_NORMAL}"
+	fi
+	
+}
+
+function get_MAS {
+	log_message "In function 'get_MAS with arguments $1 and $2'"
+	formatted_console_message "%-47s" "    AppStore Build"
+	APP_MASFOLDER="$1/Contents/_MASReceipt"
+	if [ -d "$APP_MASFOLDER" ] || [ -e "$APP_MASFOLDER" ] ; then
+		console_message "${TEXT_GREEN}Yes${TEXT_NORMAL}"
+	else
+		console_message "${TEXT_GREEN}No${TEXT_NORMAL}"
+	fi
+}
+
+function validate_codesign {
+	log_message "In function 'validate_codesign with arguments $1 and $2'"
+	formatted_console_message "%-47s" "    Code Signature"
+	$(codesign -v --deep "$1")
+	if [ $? -eq 0 ] ; then
+		log_message "Codesignature of $1 - Valid"
+		console_message "${TEXT_GREEN}Valid${TEXT_NORMAL}"
+	else
+		log_message "Codesignature of $1 - Invalid/Missing"
+		console_message "${TEXT_RED}Invalid/Missing${TEXT_NORMAL}"
+		codesign -vv --deep $1
+	fi
+}
+
+function get_MAU_channel {
+	log_message "In function 'get_MAU_channel'"
+	formatted_console_message "%-47s" "    AutoUpdate Channel"
+	MAU_CHANNEL=$(defaults read com.microsoft.autoupdate2 ChannelName)
+	if [ "$MAU_CHANNEL" == "" ]; then
+		console_message "${TEXT_GREEN}Production${TEXT_NORMAL}"
+	elif [ "$MAU_CHANNEL" == "External" ]; then
+		console_message "${TEXT_GREEN}Insider Slow${TEXT_NORMAL}"
+	elif [ "$MAU_CHANNEL" == "InsiderFast" ]; then
+		console_message "${TEXT_GREEN}Insider Fast${TEXT_NORMAL}"
+	elif [ "$MAU_CHANNEL" == "Custom" ]; then
+		console_message "${TEXT_GREEN}Custom${TEXT_NORMAL}"
+		get_ManifestServer
+	else
+		console_message "${TEXT_RED}$MAU_CHANNEL${TEXT_NORMAL}"
+	fi
+}
+
+function get_MAU_helper {
+	log_message "In function 'get_MAU_helper'"
+	formatted_console_message "%-47s" "    AutoUpdate Helper"
+	if [ -e "/Library/PrivilegedHelperTools/com.microsoft.autoupdate.helper" ]; then
+		log_message "AutoUpdate Helper Detected"
+		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
+	else
+		log_message "AutoUpdate Helper NOT DETECTED"
+		console_message "${TEXT_RED}Not Detected${TEXT_NORMAL}"
+	fi
+}
+
+function get_ManifestServer {
+	log_message "In function 'get_ManifestServer'"
+	formatted_console_message "%-47s" "    ManifestServer"
+	MAU_SERVER=$(defaults read com.microsoft.autoupdate2 ManifestServer)
+	console_message "${TEXT_GREEN}$MAU_SERVER${TEXT_NORMAL}"
+}
+
+function get_licensing_config {
+	log_message "In function 'get_licensing_config'"
+	console_message ""
+	formatted_console_message "%-45s" "Licensing configuration"
+	console_message " "
+	formatted_console_message "%-47s" "    Licensing Helper"
+	if [ -e "/Library/PrivilegedHelperTools/com.microsoft.office.licensingV2.helper" ]; then
+		log_message "Licensing helper Detected"
+		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
+	else
+		log_message "Licensing helper NOT DETECTED"
+		console_message "${TEXT_RED}Not Detected${TEXT_NORMAL}"
+	fi
+	formatted_console_message "%-47s" "    Retail/Volume License"
+	if [ -e "/Library/Preferences/com.microsoft.office.licensingV2.plist" ]; then
+		log_message "Retail/VL License Detected"
+		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
+	else
+		console_message "${TEXT_YELLOW}Not Detected${TEXT_NORMAL}"
+	fi
+	formatted_console_message "%-47s" "    Office 365 License"
+	if [ -e "$HOME/Library/Group Containers/UBF8T346G9.Office/com.microsoft.Office365.plist" ]; then
+		log_message "Office 365 License Detected"
+		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
+	else
+		console_message "${TEXT_YELLOW}Not Detected${TEXT_NORMAL}"
+	fi
+}
+
+function main_loop {
+	log_message "In function 'main_loop'"
+	# Detect operating system version
+	detect_OS
+	# Detect installed Office 2016 apps
+	detect "$PATH_MAU" "AutoUpdate application" "com.microsoft.autoupdate2"
+	dump_config "com.microsoft.autoupdate2"
+	get_MAU_helper
+	get_MAU_channel
+	test_CDN
+	detect "$PATH_WORD2016" "Word 2016 application"
+	dump_config "com.microsoft.Word"
+	detect "$PATH_EXCEL2016" "Excel 2016 application"
+	dump_config "com.microsoft.Excel"
+	detect "$PATH_PPT2016" "PowerPoint 2016 application"
+	dump_config "com.microsoft.Powerpoint"
+	detect "$PATH_OUTLOOK2016" "Outlook 2016 application"
+	dump_config "com.microsoft.Outlook"
+	detect "$PATH_ONENOTE2016" "OneNote 2016 application"
+	dump_config "com.microsoft.onenote.mac"
+	get_licensing_config
+	detect "$PATH_ENDNOTE" "EndNote add-in"
+	detect "$PATH_WEBEX" "WebEx add-in"
+	detect_addins "$PATH_WORD_ADDINS" "Word 2016"
+	detect_addins "$PATH_PPT_ADDINS" "PowerPoint 2016"
+	console_message " "
+	console_message "Full log at $LOG_FILE"
+}
+
+## Main
+log_message "Starting $SCRIPT_NAME"
+all_message "${TEXT_BLUE}=== $TOOL_NAME $TOOL_VERSION ===${TEXT_NORMAL}"
+log_device
+
+# Evaluate command-line arguments
+if [[ $# = 0 ]]; then
+	log_message "No command-line arguments passed, going into interactive mode"
+	main_loop
+else
+	log_message "Command-line arguments passed, attempting to parse"
+	while [[ $# > 0 ]]
+	do
+	key="$1"
+	log_message "Argument: $1"
+	case $key in
+    	-help|-h|-H)
+    	show_command_usage
+    	exit 0
+    	;;
+    	*)
+    	show_command_usage
+    	exit 1
+    	;;
+	esac
+	shift # past argument or value
+	done
+	main_loop
+fi
+
+console_message ""
+log_message "Exiting script"
+exit 0
