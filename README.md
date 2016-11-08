@@ -5,8 +5,8 @@ Purpose: Detects and reports out Office 2016 for Mac installation and configurat
 Provides both a visual summary in the console at run-time, and logs more in-depth information to a log file.</br>
 
 Example output:</br>
-
-`=== Microsoft Office Detection Tool 1.0 ===
+```
+=== Microsoft Office Detection Tool 1.0 ===
 
 Operating System                             10.12.1 (16B2555)
 
@@ -61,4 +61,5 @@ Detecting WebEx add-in                       Not detected
 
 Detecting Word 2016 add-ins                  
 Detecting PowerPoint 2016 add-ins             
-Full log at /Users/pbowden/Desktop/OfficeDetect.log`
+Full log at /Users/pbowden/Desktop/OfficeDetect.log
+```
