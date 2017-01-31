@@ -1,7 +1,7 @@
 #!/bin/sh
 
 TOOL_NAME="Microsoft Office Detection Tool"
-TOOL_VERSION="1.0"
+TOOL_VERSION="1.1"
 ## Copyright (c) 2016 Microsoft Corp. All rights reserved.
 ## Scripts are not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind.
 ## Microsoft disclaims all implied warranties including, without limitation, any implied warranties of merchantability or of fitness for a 
@@ -83,6 +83,9 @@ function detect_OS {
 function test_CDN {
 	log_message "In function 'test_CDN'"
 	formatted_console_message "%-47s" "    CDN Connection"
+	dig officecdn.microsoft.com
+	dig officecdn.microsoft.com +tcp
+	curl -k -H "Pragma: akamai-x-get-request-id, akamai-x-cache-on, akamai-x-cache-remote-on, akamai-x-check-cacheable, akamai-x-get-cache-key, akamai-x-get-true-cache-key, akamai-x-cache-remote, akamai-x-get-request-id, akamai-x-get-nonces" -s -D - "https://officecdn.microsoft.com/pr/C1297A47-86C4-4C1F-97FA-950631F94777/OfficeMac/0409OPIM15.xml" -o /dev/null
 	CDN_URL="http://officecdn.microsoft.com/pr/C1297A47-86C4-4C1F-97FA-950631F94777/OfficeMac/0409MSWD15-chk.xml"
 	CDN_RESPONSE=$(curl --head --location --url $CDN_URL)
 	log_message "$CDN_RESPONSE"
@@ -223,6 +226,18 @@ function get_MAU_channel {
 	fi
 }
 
+function get_priv_folder {
+	log_message "In function 'get_priv_folder'"
+	formatted_console_message "%-47s" "    /Library/PrivilegedHelperTools"
+	if [ -d "/Library/PrivilegedHelperTools" ]; then
+		log_message "PrivilegedHelperTools Folder Detected"
+		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
+	else
+		log_message "PrivilegedHelperTools Folder NOT DETECTED"
+		console_message "${TEXT_RED}Not Detected${TEXT_NORMAL}"
+	fi
+}
+
 function get_MAU_helper {
 	log_message "In function 'get_MAU_helper'"
 	formatted_console_message "%-47s" "    AutoUpdate Helper"
@@ -278,6 +293,7 @@ function main_loop {
 	# Detect installed Office 2016 apps
 	detect "$PATH_MAU" "AutoUpdate application" "com.microsoft.autoupdate2"
 	dump_config "com.microsoft.autoupdate2"
+	get_priv_folder
 	get_MAU_helper
 	get_MAU_channel
 	test_CDN
