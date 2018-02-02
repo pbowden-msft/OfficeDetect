@@ -15,16 +15,20 @@ TOOL_VERSION="1.2"
 # All stdout and sterr will go to the log file. Console alone can be accessed through >&3. For console and log use | tee /dev/fd/3
 SCRIPT_NAME=$(basename "$0")
 WORKING_FOLDER=$(dirname "$0")
-LOG_FILE="$WORKING_FOLDER/$SCRIPT_NAME.log"
-touch $LOG_FILE
+LOG_FILE="${HOME}/Library/Logs/${SCRIPT_NAME}.log"
+touch ${LOG_FILE}
+[ -t 1 ] && TERMINAL=true || TERMINAL=false
 exec 3>&1 1>${LOG_FILE} 2>&1
 
 ## Formatting support
-TEXT_RED='\033[0;31m'
-TEXT_YELLOW='\033[0;33m'
-TEXT_GREEN='\033[0;32m'
-TEXT_BLUE='\033[0;34m'
-TEXT_NORMAL='\033[0m'
+if ${TERMINAL}
+then
+	TEXT_RED='\033[0;31m'
+	TEXT_YELLOW='\033[0;33m'
+	TEXT_GREEN='\033[0;32m'
+	TEXT_BLUE='\033[0;34m'
+	TEXT_NORMAL='\033[0m'
+fi
 
 ## Initialize global run-time variables
 
