@@ -285,7 +285,8 @@ function get_licensing_config {
 		console_message "${TEXT_YELLOW}Not Detected${TEXT_NORMAL}"
 	fi
 	formatted_console_message "%-47s" "    Office 365 License"
-	if [ -e "$HOME/Library/Group Containers/UBF8T346G9.Office/com.microsoft.Office365.plist" ]; then
+	if [[ -f "$HOME/Library/Group Containers/UBF8T346G9.Office/com.microsoft.Office365.plist" || -f "$HOME/Library/Group Containers/UBF8T346G9.Office/com.microsoft.Office365V2.plist" || -f "$HOME/Library/Group Containers/UBF8T346G9.Office/com.microsoft.e0E2OUQxNUY1LTAxOUQtNDQwNS04QkJELTAxQTI5M0JBOTk4O.plist" || -f "$HOME/Library/Group Containers/UBF8T346G9.Office/e0E2OUQxNUY1LTAxOUQtNDQwNS04QkJELTAxQTI5M0JBOTk4O" || -f "$HOME/Library/Group
+        Containers/UBF8T346G9.Office/com.microsoft.O4kTOBJ0M5ITQxATLEJkQ40SNwQDNtQUOxATL1YUNxQUO2E0e.plist" || -f "$HOME/Library/Group Containers/UBF8T346G9.Office/com.microsoft.O4kTOBJ0M5ITQxATLEJkQ40SNwQDNtQUOxATL1YUNxQUO2E0e.plist" || -e "$HOME/Library/Group Containers/UBF8T346G9.Office/Licenses/" ]]; then
 		log_message "Office 365 License Detected"
 		console_message "${TEXT_GREEN}Detected${TEXT_NORMAL}"
 	else
